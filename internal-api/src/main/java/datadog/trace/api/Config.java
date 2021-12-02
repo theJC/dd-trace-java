@@ -82,6 +82,7 @@ import static datadog.trace.api.config.CwsConfig.CWS_TLS_REFRESH;
 import static datadog.trace.api.config.GeneralConfig.API_KEY;
 import static datadog.trace.api.config.GeneralConfig.API_KEY_FILE;
 import static datadog.trace.api.config.GeneralConfig.AZURE_APP_SERVICES;
+import static datadog.trace.api.config.GeneralConfig.MONGO_REACTIVESTREAMS_PROPAGATE_ALL_SINGLERESULTCALLBACK;
 import static datadog.trace.api.config.GeneralConfig.CONFIGURATION_FILE;
 import static datadog.trace.api.config.GeneralConfig.DOGSTATSD_ARGS;
 import static datadog.trace.api.config.GeneralConfig.DOGSTATSD_HOST;
@@ -476,6 +477,8 @@ public class Config {
   private final List<String> traceAgentArgs;
   private final String dogStatsDPath;
   private final List<String> dogStatsDArgs;
+
+  private final boolean mongoReactiveStreamsPropagateAllSingleResultCallback;
 
   private String env;
   private String version;
@@ -953,6 +956,8 @@ public class Config {
           Collections.unmodifiableList(
               new ArrayList<>(parseStringIntoSetOfNonEmptyStrings(traceAgentArgsString)));
     }
+
+    mongoReactiveStreamsPropagateAllSingleResultCallback = configProvider.getBoolean(MONGO_REACTIVESTREAMS_PROPAGATE_ALL_SINGLERESULTCALLBACK, false);
 
     dogStatsDPath = configProvider.getString(DOGSTATSD_PATH);
     String dogStatsDArgsString = configProvider.getString(DOGSTATSD_ARGS);
@@ -1482,6 +1487,8 @@ public class Config {
   public boolean isAzureAppServices() {
     return azureAppServices;
   }
+
+  public boolean mongoReactiveStreamsPropagateAllSingleResultCallback() { return mongoReactiveStreamsPropagateAllSingleResultCallback; }
 
   public String getTraceAgentPath() {
     return traceAgentPath;

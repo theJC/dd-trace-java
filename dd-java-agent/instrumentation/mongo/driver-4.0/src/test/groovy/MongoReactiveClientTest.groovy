@@ -19,6 +19,7 @@ import spock.lang.Timeout
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 
+import static datadog.trace.agent.test.utils.TraceUtils.basicSpan
 import static datadog.trace.agent.test.utils.TraceUtils.runUnderTrace
 
 @Timeout(10)
@@ -40,12 +41,11 @@ class MongoReactiveClientTest extends MongoBaseTest {
     MongoCollection<Document> collection = runUnderTrace("setup") {
       MongoDatabase db = client.getDatabase(databaseName)
       def latch = new CountDownLatch(1)
-      // This creates a trace that isn't linked to the parent... using NIO internally that we don't handle.
       db.createCollection(collectionName).subscribe(toSubscriber { latch.countDown() })
       latch.await()
       return db.getCollection(collectionName)
     }
-    TEST_WRITER.waitForTraces(2)
+    TEST_WRITER.waitForTraces(1)
     TEST_WRITER.clear()
     return collection
   }
@@ -83,6 +83,28 @@ class MongoReactiveClientTest extends MongoBaseTest {
     collectionName = randomCollectionName()
   }
 
+  def "test create collection with parent"() {
+    setup:
+    MongoDatabase db = client.getDatabase(databaseName)
+
+    when:
+    runUnderTrace("parent") {
+      db.createCollection(collectionName).subscribe(toSubscriber {})
+    }
+
+    then:
+    assertTraces(1) {
+      trace(2) {
+        sortSpansByStart()
+        basicSpan(it, 0,"parent")
+        mongoSpan(it, 1, "create", "{\"create\":\"$collectionName\",\"capped\":\"?\"}", "some-instance", span(0))
+      }
+    }
+
+    where:
+    collectionName = randomCollectionName()
+  }
+
   def "test create collection no description"() {
     setup:
     MongoDatabase db = MongoClients.create("mongodb://localhost:$port").getDatabase(databaseName)
@@ -94,6 +116,28 @@ class MongoReactiveClientTest extends MongoBaseTest {
     assertTraces(1) {
       trace(1) {
         mongoSpan(it, 0, "create", "{\"create\":\"$collectionName\",\"capped\":\"?\"}", databaseName)
+      }
+    }
+
+    where:
+    collectionName = randomCollectionName()
+  }
+
+  def "test create collection no description with parent"() {
+    setup:
+    MongoDatabase db = MongoClients.create("mongodb://localhost:$port").getDatabase(databaseName)
+
+    when:
+    runUnderTrace("parent") {
+      db.createCollection(collectionName).subscribe(toSubscriber {})
+    }
+
+    then:
+    assertTraces(1) {
+      trace(2) {
+        sortSpansByStart()
+        basicSpan(it, 0,"parent")
+        mongoSpan(it, 1, "create", "{\"create\":\"$collectionName\",\"capped\":\"?\"}", databaseName, span(0))
       }
     }
 
@@ -121,6 +165,64 @@ class MongoReactiveClientTest extends MongoBaseTest {
     collectionName = randomCollectionName()
   }
 
+  def "test get collection with parent"() {
+    setup:
+    MongoDatabase db = client.getDatabase(databaseName)
+
+    when:
+    def count = new CompletableFuture()
+    runUnderTrace("parent") {
+      db.getCollection(collectionName).estimatedDocumentCount().subscribe(toSubscriber { count.complete(it) })
+    }
+
+    then:
+    count.get() == 0
+    assertTraces(1) {
+      trace(2) {
+        sortSpansByStart()
+        basicSpan(it, 0,"parent")
+        mongoSpan(it, 1, "count", "{\"count\":\"$collectionName\",\"query\":{}}", "some-instance", span(0))
+      }
+    }
+
+    where:
+    collectionName = randomCollectionName()
+  }
+
+  def "test get collection count 2 times with parent"() {
+    setup:
+    MongoDatabase db = client.getDatabase(databaseName)
+
+    when:
+    def count1 = new CompletableFuture()
+    def count2 = new CompletableFuture()
+    runUnderTrace("parent1") {
+      db.getCollection(collectionName).estimatedDocumentCount().subscribe(toSubscriber { count1.complete(it) })
+    }
+    runUnderTrace("parent2") {
+      db.getCollection(collectionName).estimatedDocumentCount().subscribe(toSubscriber { count2.complete(it) })
+    }
+
+    then:
+    count1.get() == 0
+    count2.get() == 0
+    assertTraces(2) {
+      trace(2) {
+        sortSpansByStart()
+        basicSpan(it, 0,"parent1")
+        mongoSpan(it, 1, "count", "{\"count\":\"$collectionName\",\"query\":{}}", "some-instance", span(0))
+      }
+      trace(2) {
+        sortSpansByStart()
+        basicSpan(it, 0,"parent2")
+        mongoSpan(it, 1, "count", "{\"count\":\"$collectionName\",\"query\":{}}", "some-instance", span(0))
+      }
+    }
+
+    where:
+    collectionName = randomCollectionName()
+  }
+
   def "test insert"() {
     setup:
     def collection = setupCollection(collectionName)
@@ -139,6 +241,33 @@ class MongoReactiveClientTest extends MongoBaseTest {
       }
       trace(1) {
         mongoSpan(it, 0, "count", "{\"count\":\"$collectionName\",\"query\":{}}")
+      }
+    }
+
+    where:
+    collectionName = randomCollectionName()
+  }
+
+  def "test insert with parent"() {
+    setup:
+    def collection = setupCollection(collectionName)
+
+    when:
+    def count = new CompletableFuture()
+    runUnderTrace("parent") {
+      insertDocument(collection, new Document("password", "SECRET"), toSubscriber {
+        collection.estimatedDocumentCount().subscribe(toSubscriber { count.complete(it) })
+      })
+    }
+
+    then:
+    count.get() == 1
+    assertTraces(1) {
+      trace(3) {
+        sortSpansByStart()
+        basicSpan(it, 0,"parent")
+        mongoSpan(it, 1, "insert", "{\"insert\":\"$collectionName\",\"ordered\":true,\"documents\":[]}", "some-instance", span(0))
+        mongoSpan(it, 2, "count", "{\"count\":\"$collectionName\",\"query\":{}}", "some-instance", span(0))
       }
     }
 
@@ -177,6 +306,39 @@ class MongoReactiveClientTest extends MongoBaseTest {
     collectionName = randomCollectionName()
   }
 
+  def "test update with parent"() {
+    setup:
+    MongoCollection<Document> collection = setupCollection(collectionName)
+    insertDocument(collection, new Document("password", "OLDPW"), null)
+
+    when:
+    def result = new CompletableFuture<UpdateResult>()
+    def count = new CompletableFuture()
+    runUnderTrace("parent") {
+      collection.updateOne(
+        new BsonDocument("password", new BsonString("OLDPW")),
+        new BsonDocument('$set', new BsonDocument("password", new BsonString("NEWPW")))).subscribe(toSubscriber {
+          result.complete(it)
+          collection.estimatedDocumentCount().subscribe(toSubscriber { count.complete(it) })
+        })
+    }
+
+    then:
+    result.get().modifiedCount == 1
+    count.get() == 1
+    assertTraces(1) {
+      trace(3) {
+        sortSpansByStart()
+        basicSpan(it, 0,"parent")
+        mongoSpan(it, 1, "update", "{\"update\":\"$collectionName\",\"ordered\":true,\"updates\":[]}", "some-instance", span(0))
+        mongoSpan(it, 2, "count", "{\"count\":\"$collectionName\",\"query\":{}}", "some-instance", span(0))
+      }
+    }
+
+    where:
+    collectionName = randomCollectionName()
+  }
+
   def "test delete"() {
     setup:
     MongoCollection<Document> collection = setupCollection(collectionName)
@@ -206,6 +368,37 @@ class MongoReactiveClientTest extends MongoBaseTest {
     collectionName = randomCollectionName()
   }
 
+  def "test delete with parent"() {
+    setup:
+    MongoCollection<Document> collection = setupCollection(collectionName)
+    insertDocument(collection, new Document("password", "SECRET"), null)
+
+    when:
+    def result = new CompletableFuture<DeleteResult>()
+    def count = new CompletableFuture()
+    runUnderTrace("parent") {
+      collection.deleteOne(new BsonDocument("password", new BsonString("SECRET"))).subscribe(toSubscriber {
+        result.complete(it)
+        collection.estimatedDocumentCount().subscribe(toSubscriber { count.complete(it) })
+      })
+    }
+
+    then:
+    result.get().deletedCount == 1
+    count.get() == 0
+    assertTraces(1) {
+      trace(3) {
+        sortSpansByStart()
+        basicSpan(it, 0,"parent")
+        mongoSpan(it, 1, "delete", "{\"delete\":\"$collectionName\",\"ordered\":true,\"deletes\":[]}", "some-instance", span(0))
+        mongoSpan(it, 2, "count", "{\"count\":\"$collectionName\",\"query\":{}}", "some-instance", span(0))
+      }
+    }
+
+    where:
+    collectionName = randomCollectionName()
+  }
+
   def Subscriber<?> toSubscriber(Closure closure) {
     return new Subscriber() {
         boolean hasResult
@@ -216,10 +409,14 @@ class MongoReactiveClientTest extends MongoBaseTest {
         }
 
         @Override
-        void onNext(Object o) { hasResult = true; closure.call(o) }
+        void onNext(Object o) {
+          hasResult = true; closure.call(o)
+        }
 
         @Override
-        void onError(Throwable t) { hasResult = true; closure.call(t) }
+        void onError(Throwable t) {
+          hasResult = true; closure.call(t)
+        }
 
         @Override
         void onComplete() {
@@ -232,7 +429,7 @@ class MongoReactiveClientTest extends MongoBaseTest {
   }
 
   def mongoSpan(TraceAssert trace, int index, String operation, String statement, String instance = "some-instance", Object parentSpan = null, Throwable exception = null) {
-    trace.span {
+    trace.span(index) {
       serviceName "mongo"
       operationName "mongo.query"
       resourceName matchesStatement(statement)
