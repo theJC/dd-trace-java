@@ -82,7 +82,6 @@ import static datadog.trace.api.config.CwsConfig.CWS_TLS_REFRESH;
 import static datadog.trace.api.config.GeneralConfig.API_KEY;
 import static datadog.trace.api.config.GeneralConfig.API_KEY_FILE;
 import static datadog.trace.api.config.GeneralConfig.AZURE_APP_SERVICES;
-import static datadog.trace.api.config.GeneralConfig.MONGO_REACTIVESTREAMS_PROPAGATE_ALL_SINGLERESULTCALLBACK;
 import static datadog.trace.api.config.GeneralConfig.CONFIGURATION_FILE;
 import static datadog.trace.api.config.GeneralConfig.DOGSTATSD_ARGS;
 import static datadog.trace.api.config.GeneralConfig.DOGSTATSD_HOST;
@@ -95,6 +94,7 @@ import static datadog.trace.api.config.GeneralConfig.HEALTH_METRICS_ENABLED;
 import static datadog.trace.api.config.GeneralConfig.HEALTH_METRICS_STATSD_HOST;
 import static datadog.trace.api.config.GeneralConfig.HEALTH_METRICS_STATSD_PORT;
 import static datadog.trace.api.config.GeneralConfig.INTERNAL_EXIT_ON_FAILURE;
+import static datadog.trace.api.config.GeneralConfig.MONGO_REACTIVESTREAMS_PROPAGATE_ALL_SINGLERESULTCALLBACK;
 import static datadog.trace.api.config.GeneralConfig.PERF_METRICS_ENABLED;
 import static datadog.trace.api.config.GeneralConfig.RUNTIME_ID_ENABLED;
 import static datadog.trace.api.config.GeneralConfig.RUNTIME_METRICS_ENABLED;
@@ -957,7 +957,8 @@ public class Config {
               new ArrayList<>(parseStringIntoSetOfNonEmptyStrings(traceAgentArgsString)));
     }
 
-    mongoReactiveStreamsPropagateAllSingleResultCallback = configProvider.getBoolean(MONGO_REACTIVESTREAMS_PROPAGATE_ALL_SINGLERESULTCALLBACK, false);
+    mongoReactiveStreamsPropagateAllSingleResultCallback =
+        configProvider.getBoolean(MONGO_REACTIVESTREAMS_PROPAGATE_ALL_SINGLERESULTCALLBACK, false);
 
     dogStatsDPath = configProvider.getString(DOGSTATSD_PATH);
     String dogStatsDArgsString = configProvider.getString(DOGSTATSD_ARGS);
@@ -1488,7 +1489,9 @@ public class Config {
     return azureAppServices;
   }
 
-  public boolean mongoReactiveStreamsPropagateAllSingleResultCallback() { return mongoReactiveStreamsPropagateAllSingleResultCallback; }
+  public boolean mongoReactiveStreamsPropagateAllSingleResultCallback() {
+    return mongoReactiveStreamsPropagateAllSingleResultCallback;
+  }
 
   public String getTraceAgentPath() {
     return traceAgentPath;
