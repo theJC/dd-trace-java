@@ -9,7 +9,6 @@ import static net.bytebuddy.matcher.ElementMatchers.isMethod;
 
 import com.google.auto.service.AutoService;
 import datadog.trace.agent.tooling.Instrumenter;
-import datadog.trace.api.Config;
 import datadog.trace.bootstrap.instrumentation.java.concurrent.State;
 import java.util.Map;
 import net.bytebuddy.description.type.TypeDescription;
@@ -18,8 +17,7 @@ import net.bytebuddy.matcher.ElementMatcher;
 @AutoService(Instrumenter.class)
 public final class MongoReactiveStreamsInstrumentation extends Instrumenter.Tracing {
 
-  private static final boolean MONGO_REACTIVESTREAMS_PROPAGATE_ALL_SINGLERESULTCALLBACK =
-      Config.get().mongoReactiveStreamsPropagateAllSingleResultCallback();
+  private static final boolean MONGO_REACTIVESTREAMS_PROPAGATE_ALL_SINGLERESULTCALLBACK = true;
 
   public MongoReactiveStreamsInstrumentation() {
     super("mongo", "mongo-4.0");
@@ -35,6 +33,7 @@ public final class MongoReactiveStreamsInstrumentation extends Instrumenter.Trac
       return namedOneOf(
           "com.mongodb.internal.async.ErrorHandlingResultCallback",
           // Required when a call is made before the connection is created
+          "com.mongodb.internal.operation.OperationHelper$8",
           "com.mongodb.internal.operation.OperationHelper$9");
     }
   }
